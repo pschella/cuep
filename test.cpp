@@ -19,10 +19,10 @@ int main(int argc, char* argv[])
     n = 1.003;
 
     /* Allocate host memory */
-    flag = (int*)malloc(N * sizeof(int));
-    Ep = (double*)malloc(3 * N * sizeof(double));
-    Em = (double*)malloc(3 * N * sizeof(double));
-    x = (double*)malloc(3 * N * sizeof(double));
+    flag = new int[N];
+    Ep = new double[3 * N];
+    Em = new double[3 * N];
+    x = new double[3 * N];
 
     /* Generate random particle */
     for (i=0; i<3; i++) {
@@ -48,9 +48,9 @@ int main(int argc, char* argv[])
     }
 
     /* Cleanup */
-    free(flag);
-    free(Ep);
-    free(Em);
-    free(x);
+    delete[] flag;
+    delete[] Ep;
+    delete[] Em;
+    delete[] x;
 }
 
