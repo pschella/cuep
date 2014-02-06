@@ -6,11 +6,14 @@
 
 #include "cuep.h"
 
+#define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
+
 /* Constant (read only) device memory */
 __constant__ double dev_startpos[3];
 __constant__ double dev_endpos[3];
 __constant__ double dev_beta[3];
 __constant__ double dev_n;
+__constant__ int dev_N;
 
 __global__ void endpoint(int *dev_flag, double *dev_Em, double *dev_Ep, double *dev_x) {
     double r[3], rhat[3], R;
@@ -18,7 +21,7 @@ __global__ void endpoint(int *dev_flag, double *dev_Em, double *dev_Ep, double *
 
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    while (tid < N) {
+    while (tid < dev_N) {
         dev_flag[tid] = 0;
     
         /* Calculate E_- */
@@ -77,30 +80,32 @@ __global__ void endpoint(int *dev_flag, double *dev_Em, double *dev_Ep, double *
     }
 }
 
-int cuep_create_plan(struct cuep_plan *d)
+int cuep_create_plan(struct cuep_plan *d, int N)
 {
     cudaError_t err;
 
+    d->N = N;
+
     /* Allocate device memory */
-    err = cudaMalloc(&(d->dev_flag), N*sizeof(int));
+    err = cudaMalloc(&(d->dev_flag), d->N*sizeof(int));
     if (err != cudaSuccess) {
         fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
         return 1;
     }
 
-    err = cudaMalloc(&(d->dev_Ep), 3*N*sizeof(double));
+    err = cudaMalloc(&(d->dev_Ep), 3*d->N*sizeof(double));
     if (err != cudaSuccess) {
         fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
         return 1;
     }
 
-    err = cudaMalloc(&(d->dev_Em), 3*N*sizeof(double));
+    err = cudaMalloc(&(d->dev_Em), 3*d->N*sizeof(double));
     if (err != cudaSuccess) {
         fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
         return 1;
     }
 
-    err = cudaMalloc(&(d->dev_x), 3*N*sizeof(double));
+    err = cudaMalloc(&(d->dev_x), 3*d->N*sizeof(double));
     if (err != cudaSuccess) {
         fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
         return 1;
@@ -111,8 +116,8 @@ int cuep_create_plan(struct cuep_plan *d)
 
 int cuep_execute_plan(double *Em, double *Ep, int *flag, double *x, double *startpos, double *endpos, double *beta, double n, struct cuep_plan *d)
 {
-    const int threadsPerBlock = MIN(N, MAX_THREADS_PER_BLOCK);
-    const int numberOfBlocks = MIN((N+threadsPerBlock-1)/threadsPerBlock, MAX_BLOCKS);
+    const int threadsPerBlock = MIN(d->N, MAX_THREADS_PER_BLOCK);
+    const int numberOfBlocks = MIN((d->N+threadsPerBlock-1)/threadsPerBlock, MAX_BLOCKS);
 
     cudaError_t err;
 #ifdef TIME_CALL
@@ -148,7 +153,13 @@ int cuep_execute_plan(double *Em, double *Ep, int *flag, double *x, double *star
         return 1;
     }
 
-    err = cudaMemcpy(d->dev_x, x, 3*N*sizeof(double), cudaMemcpyHostToDevice);
+    err = cudaMemcpyToSymbol(dev_N, &(d->N), sizeof(int));
+    if (err != cudaSuccess) {
+        fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
+        return 1;
+    }
+
+    err = cudaMemcpy(d->dev_x, x, 3*d->N*sizeof(double), cudaMemcpyHostToDevice);
     if (err != cudaSuccess) {
         fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
         return 1;
@@ -164,24 +175,24 @@ int cuep_execute_plan(double *Em, double *Ep, int *flag, double *x, double *star
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&elapsed_time, start, stop);
 
-    printf("launched %d blocks with %d threads each\n", (N+threadsPerBlock-1)/threadsPerBlock, threadsPerBlock);
+    printf("launched %d blocks with %d threads each\n", numberOfBlocks, threadsPerBlock);
     printf("Runtime: %.3f ms\n", elapsed_time);
 #endif
 
     /* Copy result back to host */
-    err = cudaMemcpy(flag, d->dev_flag, N*sizeof(int), cudaMemcpyDeviceToHost);
+    err = cudaMemcpy(flag, d->dev_flag, d->N*sizeof(int), cudaMemcpyDeviceToHost);
     if (err != cudaSuccess) {
         fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
         return 1;
     }
 
-    err = cudaMemcpy(Ep, d->dev_Ep, 3*N*sizeof(double), cudaMemcpyDeviceToHost);
+    err = cudaMemcpy(Ep, d->dev_Ep, 3*d->N*sizeof(double), cudaMemcpyDeviceToHost);
     if (err != cudaSuccess) {
         fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
         return 1;
     }
 
-    err = cudaMemcpy(Em, d->dev_Em, 3*N*sizeof(double), cudaMemcpyDeviceToHost);
+    err = cudaMemcpy(Em, d->dev_Em, 3*d->N*sizeof(double), cudaMemcpyDeviceToHost);
     if (err != cudaSuccess) {
         fprintf(stderr, "Error %s\n", cudaGetErrorString(err));
         return 1;

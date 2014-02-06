@@ -14,6 +14,8 @@ int main(int argc, char* argv[])
     double *x, *Ep, *Em;
     struct cuep_plan d;
 
+    const int N = 1e6;
+
     srand(time(NULL));
 
     n = 1.003;
@@ -33,10 +35,10 @@ int main(int argc, char* argv[])
 
     /* Generate random antenna positions */
     for (i=0; i<3*N; i++) {
-        x[i] = SCALE * (double)rand() / RAND_MAX;
+        x[i] = 1000. * (double)rand() / RAND_MAX;
     }
 
-    if (cuep_create_plan(&d) != 0) return 1;
+    if (cuep_create_plan(&d, N) != 0) return 1;
 
     if (cuep_execute_plan(Em, Ep, flag, x, startpos, endpos, beta, n, &d) != 0) return 1;
 
