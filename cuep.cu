@@ -45,9 +45,9 @@ __global__ void endpoint(int *dev_flag, double *dev_Em, double *dev_Ep, double *
             dev_Em[3*tid+2] = 0.0;
         }
         else {
-            dev_Em[3*tid] = dot_product*rhat[0] - dev_beta[0];
-            dev_Em[3*tid+1] = dot_product*rhat[1] - dev_beta[1];
-            dev_Em[3*tid+2] = dot_product*rhat[2] - dev_beta[2];
+            dev_Em[3*tid] = (dot_product*rhat[0] - dev_beta[0]) / doppler;
+            dev_Em[3*tid+1] = (dot_product*rhat[1] - dev_beta[1]) / doppler;
+            dev_Em[3*tid+2] = (dot_product*rhat[2] - dev_beta[2]) / doppler;
         }
     
         /* Calculate E_+ */
@@ -71,9 +71,9 @@ __global__ void endpoint(int *dev_flag, double *dev_Em, double *dev_Ep, double *
         }
         else {
             dev_flag[tid] = 0;
-            dev_Ep[3*tid] = dot_product*rhat[0] - dev_beta[0];
-            dev_Ep[3*tid+1] = dot_product*rhat[1] - dev_beta[1];
-            dev_Ep[3*tid+2] = dot_product*rhat[2] - dev_beta[2];
+            dev_Ep[3*tid] = (dot_product*rhat[0] - dev_beta[0]) / doppler;
+            dev_Ep[3*tid+1] = (dot_product*rhat[1] - dev_beta[1]) / doppler;
+            dev_Ep[3*tid+2] = (dot_product*rhat[2] - dev_beta[2]) / doppler;
         }
 
         tid += blockDim.x * gridDim.x;
