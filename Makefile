@@ -1,8 +1,12 @@
-all: coreas_gpu cuep
+all: cuep test
 
-coreas_gpu: coreas_gpu.cu
-	nvcc -lcudart -O2 -o coreas_gpu coreas_gpu.cu
+cuep: cuep.cu cuep.h
+	nvcc -shared -Xcompiler '-fPIC' -lcudart -O2 cuep.cu -o libcuep.so
 
-cuep: cuep.cu
-	nvcc -lcudart -O2 -o cuep cuep.cu
+test: test.cpp
+	g++ -m64 test.cpp -o test libcuep.so
+
+.PHONY: clean
+clean: test.cpp
+	rm -f *.o test
 

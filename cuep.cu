@@ -4,49 +4,13 @@
 #include <time.h>
 #include <stdlib.h>
 
-/* Print runtime */
-#define TIME_CALL
-
-/* When the Doppler factor is to be considered zero */
-#define SMALL_NUMBER 1.e-20
-
-/* Number of antennas */
-#define N 512
-
-/* Scaling of random positions for antenna grid (arbitrary and not needed for actual code) */
-#define SCALE 500
-
-#define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
-
-/* The number of parallel GPU threads is determined by the product of the number of
- * thread blocks launched and the number of threads per block. There are hardware limits
- * on both numbers. If possible a thread is launched for each observer position.
- * If the number of observer positions exceeds the maximum number of threads allowed per block
- * (which is usually 1024 but is hardware dependent) than multiple blocks are launched.
- * The maximum number of threads launched in total is 1024 (blocks) * 1024 (threads per block)
- * if even more antennas are needed all threads loop over several antennas instead.
- * For performance one might want to play with the 1024 and try different powers of two (within hardware limits).
- */
-
-#define MAX_BLOCKS 1024
-#define MAX_THREADS_PER_BLOCK 1024
-
-const int threadsPerBlock = MIN(N, MAX_THREADS_PER_BLOCK);
-const int numberOfBlocks = MIN((N+threadsPerBlock-1)/threadsPerBlock, MAX_BLOCKS);
+#include "cuep.h"
 
 /* Constant (read only) device memory */
 __constant__ double dev_startpos[3];
 __constant__ double dev_endpos[3];
 __constant__ double dev_beta[3];
 __constant__ double dev_n;
-
-/* Structure to store device memory pointers */
-struct cuep_plan {
-    int *dev_flag;
-    double *dev_x;
-    double *dev_Ep;
-    double *dev_Em;
-};
 
 __global__ void endpoint(int *dev_flag, double *dev_Em, double *dev_Ep, double *dev_x) {
     double r[3], rhat[3], R;
@@ -147,6 +111,9 @@ int cuep_create_plan(struct cuep_plan *d)
 
 int cuep_execute_plan(double *Em, double *Ep, int *flag, double *x, double *startpos, double *endpos, double *beta, double n, struct cuep_plan *d)
 {
+    const int threadsPerBlock = MIN(N, MAX_THREADS_PER_BLOCK);
+    const int numberOfBlocks = MIN((N+threadsPerBlock-1)/threadsPerBlock, MAX_BLOCKS);
+
     cudaError_t err;
 #ifdef TIME_CALL
     cudaEvent_t start, stop;
@@ -187,7 +154,7 @@ int cuep_execute_plan(double *Em, double *Ep, int *flag, double *x, double *star
         return 1;
     }
 
-    /* Call function on device, launching 1 thread block with N threads */
+    /* Call function on device */
 #ifdef TIME_CALL
     cudaEventRecord(start, 0);
 #endif
@@ -238,56 +205,5 @@ int cuep_destroy_plan(struct cuep_plan *d)
     }
 
     return 0;
-}
-
-int main(int argc, char* argv[])
-{
-    int i;
-    int *flag;
-    double startpos[3];
-    double endpos[3];
-    double beta[3];
-    double n;
-    double *x, *Ep, *Em;
-    struct cuep_plan d;
-
-    srand(time(NULL));
-
-    n = 1.003;
-
-    /* Allocate host memory */
-    flag = (int*)malloc(N * sizeof(int));
-    Ep = (double*)malloc(3 * N * sizeof(double));
-    Em = (double*)malloc(3 * N * sizeof(double));
-    x = (double*)malloc(3 * N * sizeof(double));
-
-    /* Generate random particle */
-    for (i=0; i<3; i++) {
-        startpos[i] = 1000. * (double)rand() / RAND_MAX;
-        endpos[i] = 1000. * (double)rand() / RAND_MAX;
-        beta[i] = (double)rand() / RAND_MAX;
-    }
-
-    /* Generate random antenna positions */
-    for (i=0; i<3*N; i++) {
-        x[i] = SCALE * (double)rand() / RAND_MAX;
-    }
-
-    if (cuep_create_plan(&d) != 0) return 1;
-
-    if (cuep_execute_plan(Em, Ep, flag, x, startpos, endpos, beta, n, &d) != 0) return 1;
-
-    if (cuep_destroy_plan(&d) != 0) return 1;
-
-    /* Print results */
-    for (i=0; i<10; i++) {
-        printf("flag %d E+ %.3f %.3f %.3f E- %.3f %.3f %.3f\n", flag[i], Ep[3*i], Ep[3*i+1], Ep[3*i+2], Em[3*i], Em[3*i+1], Em[3*i+2]);
-    }
-
-    /* Cleanup */
-    free(flag);
-    free(Ep);
-    free(Em);
-    free(x);
 }
 
